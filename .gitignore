@@ -41,3 +41,9 @@ google-services.json
 
 # Android Profiling
 *.hprof
+
+# Claude Code
+.claude/
+.claude_history
+claude_session*
+.claude_code/
