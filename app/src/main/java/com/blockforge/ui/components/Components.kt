@@ -414,7 +414,20 @@ fun BlockForgeTabRow(
         selectedTabIndex = selectedTabIndex,
         modifier = modifier,
         containerColor = MaterialTheme.colorScheme.surface,
-        contentColor = MaterialTheme.colorScheme.primary
+        contentColor = MaterialTheme.colorScheme.primary,
+        indicator = @Composable { tabPositions ->
+            if (selectedTabIndex < tabPositions.size) {
+                Box(
+                    Modifier
+                        .tabIndicatorOffset(tabPositions[selectedTabIndex])
+                        .height(3.dp)
+                        .background(
+                            color = MaterialTheme.colorScheme.primary,
+                            shape = RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp)
+                        )
+                )
+            }
+        }
     ) {
         Tab(
             selected = selectedTabIndex == 0,
