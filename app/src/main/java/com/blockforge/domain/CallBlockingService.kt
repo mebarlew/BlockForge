@@ -20,7 +20,7 @@ import javax.inject.Inject
 class CallBlockingService : CallScreeningService() {
 
     @Inject
-    lateinit fun database: AppDatabase
+    lateinit var database: AppDatabase
 
     private val serviceScope = CoroutineScope(Dispatchers.IO)
 
