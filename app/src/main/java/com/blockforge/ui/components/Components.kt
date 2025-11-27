@@ -25,6 +25,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.offset
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.wrapContentSize
 import com.blockforge.data.database.BlockedCall
 import com.blockforge.data.database.BlockedPrefix
 import com.blockforge.ui.theme.*
@@ -417,9 +420,13 @@ fun BlockForgeTabRow(
         contentColor = MaterialTheme.colorScheme.primary,
         indicator = @Composable { tabPositions ->
             if (selectedTabIndex < tabPositions.size) {
+                val currentTabPosition = tabPositions[selectedTabIndex]
                 Box(
                     Modifier
-                        .tabIndicatorOffset(tabPositions[selectedTabIndex])
+                        .fillMaxWidth()
+                        .wrapContentSize(Alignment.BottomStart)
+                        .offset(x = currentTabPosition.left)
+                        .width(currentTabPosition.width)
                         .height(3.dp)
                         .background(
                             color = MaterialTheme.colorScheme.primary,
