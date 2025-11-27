@@ -54,6 +54,12 @@ Uses Android's `CallScreeningService` API to intercept and reject unwanted calls
 3. Sync Gradle
 4. Build & run
 
+## About
+
+Built by a JavaScript developer learning Android development with significant help from Claude AI. This is my first Android project, so feedback and contributions are highly appreciated!
+
+Feel free to open issues or submit PRs if you find bugs or have suggestions.
+
 ## License
 
 MIT
