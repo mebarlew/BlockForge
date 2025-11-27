@@ -414,18 +414,7 @@ fun BlockForgeTabRow(
         selectedTabIndex = selectedTabIndex,
         modifier = modifier,
         containerColor = MaterialTheme.colorScheme.surface,
-        contentColor = MaterialTheme.colorScheme.primary,
-        indicator = { tabPositions ->
-            if (selectedTabIndex < tabPositions.size) {
-                TabRowDefaults.SecondaryIndicator(
-                    modifier = Modifier.then(
-                        TabRowDefaults.tabIndicatorOffset(tabPositions[selectedTabIndex])
-                    ),
-                    height = 3.dp,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-        }
+        contentColor = MaterialTheme.colorScheme.primary
     ) {
         Tab(
             selected = selectedTabIndex == 0,
