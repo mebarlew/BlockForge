@@ -2,18 +2,20 @@ package com.blockforge.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.blockforge.data.database.BlockedCall
 import com.blockforge.data.database.BlockedPrefix
 import com.blockforge.data.repository.BlocklistRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * ViewModel for managing the blocklist
- * Handles business logic and communicates with repository
+ * ViewModel for managing the blocklist and call logs
  */
 @HiltViewModel
 class BlocklistViewModel @Inject constructor(
@@ -22,7 +24,6 @@ class BlocklistViewModel @Inject constructor(
 
     /**
      * List of all blocked prefixes
-     * Automatically updates when database changes
      */
     val blockedPrefixes: StateFlow<List<BlockedPrefix>> = repository.getAllPrefixes()
         .stateIn(
@@ -32,21 +33,55 @@ class BlocklistViewModel @Inject constructor(
         )
 
     /**
+     * Recent blocked calls log
+     */
+    val recentBlockedCalls: StateFlow<List<BlockedCall>> = repository.getRecentBlockedCalls()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    /**
+     * Total blocked calls count
+     */
+    val totalBlockedCount: StateFlow<Int> = repository.getBlockedCallsCount()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = 0
+        )
+
+    /**
+     * Blocked calls count today
+     */
+    val todayBlockedCount: StateFlow<Int> = repository.getBlockedCallsCountToday()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = 0
+        )
+
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+
+    /**
      * Add a new prefix to the blocklist
      */
     fun addPrefix(prefix: String, description: String? = null) {
         viewModelScope.launch {
-            // Validate prefix is not empty
-            if (prefix.isBlank()) return@launch
-
-            // Check if already exists
-            if (repository.prefixExists(prefix)) {
-                // TODO: Show error to user
+            if (prefix.isBlank()) {
+                _errorMessage.value = "Prefix cannot be empty"
                 return@launch
             }
 
-            // Add to database
+            if (repository.prefixExists(prefix.trim())) {
+                _errorMessage.value = "This prefix already exists"
+                return@launch
+            }
+
             repository.addPrefix(prefix.trim(), description?.trim())
+            _errorMessage.value = null
         }
     }
 
@@ -57,5 +92,27 @@ class BlocklistViewModel @Inject constructor(
         viewModelScope.launch {
             repository.deletePrefix(prefix)
         }
+    }
+
+    /**
+     * Clear all blocked call logs
+     */
+    fun clearBlockedCallLogs() {
+        viewModelScope.launch {
+            repository.clearBlockedCallLogs()
+        }
+    }
+
+    /**
+     * Delete a single blocked call log entry
+     */
+    fun deleteBlockedCall(call: BlockedCall) {
+        viewModelScope.launch {
+            repository.deleteBlockedCall(call)
+        }
+    }
+
+    fun clearError() {
+        _errorMessage.value = null
     }
 }

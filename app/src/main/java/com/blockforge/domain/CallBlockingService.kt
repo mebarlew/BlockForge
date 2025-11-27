@@ -4,6 +4,7 @@ import android.telecom.Call
 import android.telecom.CallScreeningService
 import android.util.Log
 import com.blockforge.data.database.AppDatabase
+import com.blockforge.data.database.BlockedCall
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -12,9 +13,9 @@ import javax.inject.Inject
 
 /**
  * CallScreeningService implementation
- * This service intercepts incoming calls and blocks them based on prefix rules
+ * Intercepts incoming calls and blocks them based on prefix rules
  *
- * IMPORTANT: This service must respond within 5 seconds or Android will timeout
+ * IMPORTANT: Must respond within 5 seconds or Android will timeout
  */
 @AndroidEntryPoint
 class CallBlockingService : CallScreeningService() {
@@ -25,43 +26,58 @@ class CallBlockingService : CallScreeningService() {
     private val serviceScope = CoroutineScope(Dispatchers.IO)
 
     override fun onScreenCall(callDetails: Call.Details) {
-        // Extract phone number from call details
         val phoneNumber = callDetails.handle?.schemeSpecificPart ?: ""
 
         Log.d(TAG, "Screening call from: $phoneNumber")
 
-        // Check if number should be blocked (async but must respond quickly)
         serviceScope.launch {
-            val shouldBlock = checkIfBlocked(phoneNumber)
+            val matchedPrefix = findMatchingPrefix(phoneNumber)
+            val shouldBlock = matchedPrefix != null
 
-            // Build response
+            if (shouldBlock && matchedPrefix != null) {
+                // Log the blocked call
+                logBlockedCall(phoneNumber, matchedPrefix)
+                Log.d(TAG, "BLOCKED call from $phoneNumber (matched prefix: $matchedPrefix)")
+            } else {
+                Log.d(TAG, "ALLOWED call from $phoneNumber")
+            }
+
             val response = CallResponse.Builder()
                 .setDisallowCall(shouldBlock)
                 .setRejectCall(shouldBlock)
-                .setSkipCallLog(false)  // Still log blocked calls
-                .setSkipNotification(false)  // Show notification for blocked calls
+                .setSkipCallLog(false)
+                .setSkipNotification(shouldBlock)
                 .build()
 
-            // Respond to call
             respondToCall(callDetails, response)
-
-            Log.d(TAG, "Call ${if (shouldBlock) "BLOCKED" else "ALLOWED"}: $phoneNumber")
         }
     }
 
     /**
-     * Check if phone number starts with any blocked prefix
-     * Must execute quickly (< 5 seconds)
+     * Find which prefix matches the phone number, if any
      */
-    private suspend fun checkIfBlocked(phoneNumber: String): Boolean {
-        if (phoneNumber.isBlank()) return false
+    private suspend fun findMatchingPrefix(phoneNumber: String): String? {
+        if (phoneNumber.isBlank()) return null
 
-        // Get all blocked prefixes from database
         val blockedPrefixes = database.blockedPrefixDao().getAllPrefixStrings()
-
-        // Check if number starts with any blocked prefix
-        return blockedPrefixes.any { prefix ->
+        return blockedPrefixes.find { prefix ->
             phoneNumber.startsWith(prefix)
+        }
+    }
+
+    /**
+     * Log a blocked call to the database
+     */
+    private suspend fun logBlockedCall(phoneNumber: String, matchedPrefix: String) {
+        try {
+            val blockedCall = BlockedCall(
+                phoneNumber = phoneNumber,
+                matchedPrefix = matchedPrefix
+            )
+            database.blockedCallDao().insert(blockedCall)
+            Log.d(TAG, "Logged blocked call: $phoneNumber")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to log blocked call", e)
         }
     }
 

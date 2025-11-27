@@ -5,13 +5,13 @@ import androidx.room.RoomDatabase
 
 /**
  * Room Database for BlockForge
- * Currently contains only BlockedPrefix table
  */
 @Database(
-    entities = [BlockedPrefix::class],
-    version = 1,
+    entities = [BlockedPrefix::class, BlockedCall::class],
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun blockedPrefixDao(): BlockedPrefixDao
+    abstract fun blockedCallDao(): BlockedCallDao
 }
