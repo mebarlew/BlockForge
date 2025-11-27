@@ -5,9 +5,21 @@ Simple Android app for blocking unwanted calls. Free and open-source, no ads.
 ## What it does
 
 - Blocks spam calls using Android's CallScreeningService
+- **Prefix-based blocking** - block all numbers starting with specific prefixes (e.g., `+48`, `+1-800`, `555`)
 - Silent rejection of calls from your blocklist
 - Local storage - no data sent anywhere
 - Works alongside your existing phone app
+
+## Features
+
+### Prefix Blocking
+Block entire ranges of numbers by prefix:
+- Country codes (e.g., `+48` blocks all Poland numbers)
+- Area codes (e.g., `555` blocks specific region)
+- Toll-free spam (e.g., `+1-800`)
+- Custom patterns
+
+Example: Add `+48` to blocklist → all calls starting with `+48` are rejected
 
 ## Requirements
 
