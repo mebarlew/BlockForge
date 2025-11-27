@@ -48,7 +48,3 @@ google-services.json
 claude_session*
 .claude_code/
 
-# Internal documentation (not for public repo)
-CLAUDE.md
-ANDROID_STUDIO_SETUP.md
-UI_OPTIONS.md
