@@ -5,6 +5,7 @@
     <!-- Permissions required for call screening -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
 
     <!-- Permissions for caller ID lookup -->
     <uses-permission android:name="android.permission.INTERNET" />
