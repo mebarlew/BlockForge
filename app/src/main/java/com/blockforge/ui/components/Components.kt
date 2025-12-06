@@ -3,7 +3,9 @@ package com.blockforge.ui.components
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,6 +27,8 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -36,6 +40,13 @@ import com.blockforge.data.database.BlockedPrefix
 import com.blockforge.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.*
+
+// Pre-computed colors for performance
+private val ColorOrange = Color(0xFFFF9800)
+private val ColorPurple = Color(0xFF9C27B0)
+
+// Single date formatter instance
+private val blockedCallDateFormat = SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault())
 
 /**
  * Hero header with gradient background and stats
@@ -165,9 +176,11 @@ fun PrefixCard(
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val haptic = LocalHapticFeedback.current
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { dismissValue ->
             if (dismissValue == SwipeToDismissBoxValue.EndToStart) {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 onDelete()
                 true
             } else false
@@ -273,45 +286,62 @@ fun PrefixCard(
     )
 }
 
+// Helper functions for block reason - no object allocation
+private fun getBlockReasonIcon(matchedPrefix: String): ImageVector = when (matchedPrefix) {
+    "Block All Calls" -> Icons.Default.DoNotDisturbOn
+    "Unknown Number" -> Icons.Default.PersonOff
+    "International" -> Icons.Default.Public
+    else -> Icons.Default.PhoneDisabled
+}
+
+private fun getBlockReasonColor(matchedPrefix: String): Color = when (matchedPrefix) {
+    "Block All Calls" -> StatusInactive
+    "Unknown Number" -> ColorOrange
+    "International" -> ColorPurple
+    else -> StatusInactive
+}
+
+private fun getBlockReasonLabel(matchedPrefix: String): String = when (matchedPrefix) {
+    "Block All Calls" -> "Block All"
+    "Unknown Number" -> "Unknown"
+    "International" -> "International"
+    else -> "Prefix: $matchedPrefix"
+}
+
 /**
  * Blocked call log card with different icons based on block reason
+ * Optimized: no object allocation during composition
+ * Tap to call, long press for options
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun BlockedCallCard(
     call: BlockedCall,
     onDelete: () -> Unit,
+    onClick: () -> Unit = {},
+    onLongClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val dateFormat = remember { SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()) }
-
-    // Choose icon and color based on block reason
-    val (icon, iconColor, reasonLabel) = remember(call.matchedPrefix) {
-        when {
-            call.matchedPrefix == "Block All Calls" -> Triple(
-                Icons.Default.DoNotDisturbOn,
-                StatusInactive,
-                "Block All"
-            )
-            call.matchedPrefix == "Unknown Number" -> Triple(
-                Icons.Default.PersonOff,
-                Color(0xFFFF9800),  // Orange
-                "Unknown"
-            )
-            call.matchedPrefix == "International" -> Triple(
-                Icons.Default.Public,
-                Color(0xFF9C27B0),  // Purple
-                "International"
-            )
-            else -> Triple(
-                Icons.Default.PhoneDisabled,
-                StatusInactive,
-                "Prefix: ${call.matchedPrefix}"
-            )
-        }
-    }
+    val haptic = LocalHapticFeedback.current
+    val icon = getBlockReasonIcon(call.matchedPrefix)
+    val iconColor = getBlockReasonColor(call.matchedPrefix)
+    val reasonLabel = getBlockReasonLabel(call.matchedPrefix)
+    val formattedDate = remember(call.blockedAt) { blockedCallDateFormat.format(Date(call.blockedAt)) }
 
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .combinedClickable(
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onClick()
+                },
+                onLongClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onLongClick()
+                }
+            ),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
@@ -379,7 +409,7 @@ fun BlockedCallCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = dateFormat.format(Date(call.blockedAt)),
+                        text = formattedDate,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -401,43 +431,66 @@ fun BlockedCallCard(
 }
 
 /**
- * Empty state component
+ * Enhanced empty state component with optional action button
  */
 @Composable
 fun EmptyState(
     icon: ImageVector,
     title: String,
     subtitle: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    actionText: String? = null,
+    onAction: (() -> Unit)? = null
 ) {
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(48.dp),
+            .padding(horizontal = 32.dp, vertical = 48.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        // Animated icon container with layered background
         Box(
-            modifier = Modifier
-                .size(80.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(40.dp)
+            // Outer glow ring
+            Box(
+                modifier = Modifier
+                    .size(120.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.05f))
             )
+            // Middle ring
+            Box(
+                modifier = Modifier
+                    .size(96.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f))
+            )
+            // Inner circle with icon
+            Box(
+                modifier = Modifier
+                    .size(72.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(36.dp)
+                )
+            }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(32.dp))
 
         Text(
             text = title,
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onSurface,
-            fontWeight = FontWeight.SemiBold
+            fontWeight = FontWeight.SemiBold,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -445,8 +498,29 @@ fun EmptyState(
         Text(
             text = subtitle,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 16.dp)
         )
+
+        // Optional action button
+        if (actionText != null && onAction != null) {
+            Spacer(modifier = Modifier.height(24.dp))
+
+            FilledTonalButton(
+                onClick = onAction,
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                    contentColor = MaterialTheme.colorScheme.primary
+                )
+            ) {
+                Text(
+                    text = actionText,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
     }
 }
 

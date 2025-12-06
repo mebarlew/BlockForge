@@ -8,10 +8,19 @@ Modern Android app for blocking unwanted calls and identifying unknown callers. 
 - **Prefix-based blocking** - block all numbers starting with specific prefixes
   - Country codes (e.g., `+48` blocks all Poland numbers)
   - Area codes (e.g., `555` blocks specific region)
-  - Toll-free spam (e.g., `+1-800`)
+  - Toll-free spam (e.g., `+1-800`, `+1-888`, `+1-877`)
   - Custom patterns
+- **Block All Mode** - silence all incoming calls with one tap
+- **Block Unknown Callers** - only allow calls from your contacts
+- **Block International** - block calls from outside your country
 - Silent rejection of calls from your blocklist
-- Blocked call logging with timestamps
+- Blocked call logging with timestamps and block reason
+
+### Call Log Integration
+- **System call log** - view your complete call history in-app
+- **Blocked calls tab** - separate view for blocked call history
+- Different icons for call types (incoming, outgoing, missed, blocked)
+- Tap to call back, long-press for options (SMS, block prefix, copy number)
 
 ### Caller ID
 - **Number identification** for incoming calls
@@ -21,13 +30,16 @@ Modern Android app for blocking unwanted calls and identifying unknown callers. 
 - Overlay appears on incoming calls
 
 ### Modern UI
-- Material 3 design with custom color scheme
+- Material 3 design with dynamic theming
 - Dark/Light theme support
-- Hero header with blocking statistics
-- Tabbed interface (Blocked Prefixes / Call Log)
+- **Permission priming** - explains why each permission is needed
+- **Protection level indicator** - see your current protection status
+- Hero headers with gradient backgrounds
+- Tabbed interface (All Calls / Blocked)
 - Swipe-to-delete on list items
-- Bottom sheet for adding prefixes
-- Beautiful empty states
+- Bottom sheet with quick prefix suggestions
+- Layered empty states with call-to-action buttons
+- **Haptic feedback** throughout the app
 
 ## Screenshots
 
@@ -42,9 +54,15 @@ Modern Android app for blocking unwanted calls and identifying unknown callers. 
 ## Setup
 
 1. Install the app
-2. Grant required permissions when prompted
-3. Set BlockForge as your default caller ID & spam app in phone settings
-4. Add prefixes to block unwanted call ranges
+2. **Permissions screen** guides you through each permission with clear explanations:
+   - **Call Screening** (required) - enables call blocking
+   - **Phone State** - detect incoming calls
+   - **Call Log** - view call history in-app
+   - **Contacts** - allow calls from people you know
+   - **Make Calls** - call back from the app
+   - **Display Over Apps** - show caller ID overlay
+3. Progress indicator shows setup completion
+4. Add prefixes to block, or use quick suggestions for common spam prefixes
 
 ### Caller ID API (Optional)
 
@@ -95,17 +113,17 @@ The phone may ring briefly (~1 second) before blocking - this is normal API beha
 ## Limitations
 
 - Not 100% reliable on all devices (some Samsung/manufacturer-specific issues)
-- Only screens non-contact numbers by default
-- Brief ring before blocking is expected
+- Brief ring before blocking is expected (Android API limitation)
 - Caller ID accuracy depends on API provider
 - Free API tier limited to 100 lookups/month
 
 ## Privacy
 
-- All data stored locally on device
+- **All data stored locally on device**
 - Caller ID lookups sent to NumVerify API (phone numbers only)
 - No analytics or tracking
 - No ads
+- No data collection
 
 ## Contributing
 
@@ -120,4 +138,12 @@ MIT
 
 ## Status
 
-🚀 **Beta** - Core features working, testing in progress
+🚀 **Active Development** - Core features complete, UI polished, testing in progress
+
+### Recent Updates
+- Enhanced permissions screen with permission priming
+- Improved settings with protection level indicator
+- System call log integration with two-tab interface
+- Quick prefix suggestions for common spam numbers
+- Haptic feedback throughout the app
+- Better empty states with call-to-action buttons

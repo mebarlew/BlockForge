@@ -4,15 +4,21 @@ import android.content.ContentResolver
 import android.content.Context
 import android.database.Cursor
 import android.provider.CallLog
+import android.util.Log
+import androidx.compose.runtime.Immutable
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
+private const val TAG = "CallLogRepository"
+
 /**
  * Represents a call from the system call log
+ * @Immutable tells Compose this class won't change, improving recomposition performance
  */
+@Immutable
 data class SystemCallEntry(
     val id: Long,
     val number: String,
@@ -51,14 +57,23 @@ class CallLogRepository @Inject constructor(
     suspend fun getRecentCalls(limit: Int = 100): List<SystemCallEntry> = withContext(Dispatchers.IO) {
         val calls = mutableListOf<SystemCallEntry>()
 
+        Log.d(TAG, "getRecentCalls called with limit=$limit")
+
         // Check permission first
-        if (context.checkSelfPermission(android.Manifest.permission.READ_CALL_LOG)
-            != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+        val hasPermission = context.checkSelfPermission(android.Manifest.permission.READ_CALL_LOG) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+
+        Log.d(TAG, "READ_CALL_LOG permission granted: $hasPermission")
+
+        if (!hasPermission) {
+            Log.w(TAG, "READ_CALL_LOG permission NOT granted, returning empty list")
             return@withContext emptyList()
         }
 
         var cursor: Cursor? = null
         try {
+            Log.d(TAG, "Querying CallLog.Calls.CONTENT_URI...")
+
             cursor = contentResolver.query(
                 CallLog.Calls.CONTENT_URI,
                 arrayOf(
@@ -71,8 +86,10 @@ class CallLogRepository @Inject constructor(
                 ),
                 null,
                 null,
-                "${CallLog.Calls.DATE} DESC LIMIT $limit"
+                "${CallLog.Calls.DATE} DESC"
             )
+
+            Log.d(TAG, "Query returned cursor: ${cursor != null}, count: ${cursor?.count ?: 0}")
 
             cursor?.let {
                 val idIndex = it.getColumnIndex(CallLog.Calls._ID)
@@ -82,7 +99,10 @@ class CallLogRepository @Inject constructor(
                 val durationIndex = it.getColumnIndex(CallLog.Calls.DURATION)
                 val typeIndex = it.getColumnIndex(CallLog.Calls.TYPE)
 
-                while (it.moveToNext()) {
+                Log.d(TAG, "Column indices - id:$idIndex, number:$numberIndex, name:$nameIndex, date:$dateIndex, duration:$durationIndex, type:$typeIndex")
+
+                var count = 0
+                while (it.moveToNext() && count < limit) {
                     val callType = when (it.getInt(typeIndex)) {
                         CallLog.Calls.INCOMING_TYPE -> CallType.INCOMING
                         CallLog.Calls.OUTGOING_TYPE -> CallType.OUTGOING
@@ -92,21 +112,36 @@ class CallLogRepository @Inject constructor(
                         else -> CallType.UNKNOWN
                     }
 
-                    calls.add(
-                        SystemCallEntry(
-                            id = it.getLong(idIndex),
-                            number = it.getString(numberIndex) ?: "Unknown",
-                            contactName = it.getString(nameIndex),
-                            date = it.getLong(dateIndex),
-                            duration = it.getLong(durationIndex),
-                            type = callType
-                        )
+                    // Handle empty/null phone numbers (private/hidden callers)
+                    val rawNumber = it.getString(numberIndex)
+                    val number = when {
+                        rawNumber.isNullOrBlank() -> "Private Number"
+                        rawNumber == "-1" -> "Private Number"
+                        rawNumber == "-2" -> "Payphone"
+                        else -> rawNumber
+                    }
+
+                    val entry = SystemCallEntry(
+                        id = it.getLong(idIndex),
+                        number = number,
+                        contactName = it.getString(nameIndex),
+                        date = it.getLong(dateIndex),
+                        duration = it.getLong(durationIndex),
+                        type = callType
                     )
+                    calls.add(entry)
+                    count++
+
+                    if (count <= 3) {
+                        Log.d(TAG, "Call entry: ${entry.number}, type=${entry.type}, date=${entry.date}")
+                    }
                 }
             }
+
+            Log.d(TAG, "Loaded ${calls.size} calls from system log")
+
         } catch (e: Exception) {
-            // Log error but don't crash
-            android.util.Log.e("CallLogRepository", "Error reading call log", e)
+            Log.e(TAG, "Error reading call log", e)
         } finally {
             cursor?.close()
         }

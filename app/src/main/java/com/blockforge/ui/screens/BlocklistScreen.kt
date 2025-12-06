@@ -6,22 +6,26 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Block
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -84,33 +88,29 @@ fun BlocklistScreen(
         }
     }
 
+    val haptic = LocalHapticFeedback.current
+
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Blocking Rules") },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            )
-        },
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = {
             SnackbarHost(hostState = snackbarHostState)
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
-                onClick = { showAddSheet = true },
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    showAddSheet = true
+                },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = Color.White,
-                shape = CircleShape
+                shape = RoundedCornerShape(16.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.Add,
                     contentDescription = "Add prefix"
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Add Prefix")
+                Text("Add Prefix", fontWeight = FontWeight.SemiBold)
             }
         }
     ) { padding ->
@@ -119,11 +119,41 @@ fun BlocklistScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
+            // Header with gradient
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.primaryContainer,
+                                MaterialTheme.colorScheme.background
+                            )
+                        )
+                    )
+                    .padding(24.dp)
+            ) {
+                Column {
+                    Text(
+                        text = "Blocking Rules",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "${blockedPrefixes.size} prefix${if (blockedPrefixes.size != 1) "es" else ""} blocked",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
             // Warning banner if Call Screening Role not granted
             if (!hasCallScreeningRole) {
                 CallScreeningWarningBanner(
                     onOpenSettings = {
-                        // Use launcher for proper ActivityResult handling
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                             val roleManager = context.getSystemService(Context.ROLE_SERVICE) as RoleManager
                             val intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_CALL_SCREENING)
@@ -136,7 +166,8 @@ fun BlocklistScreen(
             // Prefix list
             PrefixListContent(
                 prefixes = blockedPrefixes,
-                onDelete = { viewModel.deletePrefix(it) }
+                onDelete = { viewModel.deletePrefix(it) },
+                onAddClick = { showAddSheet = true }
             )
         }
 
@@ -160,13 +191,16 @@ fun BlocklistScreen(
 @Composable
 private fun PrefixListContent(
     prefixes: List<com.blockforge.data.database.BlockedPrefix>,
-    onDelete: (com.blockforge.data.database.BlockedPrefix) -> Unit
+    onDelete: (com.blockforge.data.database.BlockedPrefix) -> Unit,
+    onAddClick: () -> Unit
 ) {
     if (prefixes.isEmpty()) {
         EmptyState(
             icon = Icons.Default.Block,
-            title = "No Blocked Prefixes",
-            subtitle = "Tap the button below to add your first prefix"
+            title = "No Blocking Rules",
+            subtitle = "Add phone number prefixes to block spam calls from specific area codes or countries",
+            actionText = "Add Your First Prefix",
+            onAction = onAddClick
         )
     } else {
         LazyColumn(
@@ -193,7 +227,27 @@ private fun PrefixListContent(
 }
 
 /**
- * Modern bottom sheet for adding a prefix
+ * Common prefix suggestions for quick blocking
+ */
+private data class PrefixSuggestion(
+    val prefix: String,
+    val label: String,
+    val description: String
+)
+
+private val commonPrefixes = listOf(
+    PrefixSuggestion("+1-800", "Toll-Free US", "US toll-free numbers"),
+    PrefixSuggestion("+1-888", "Toll-Free US", "US toll-free numbers"),
+    PrefixSuggestion("+1-877", "Toll-Free US", "US toll-free numbers"),
+    PrefixSuggestion("+1-866", "Toll-Free US", "US toll-free numbers"),
+    PrefixSuggestion("+44", "UK", "United Kingdom"),
+    PrefixSuggestion("+91", "India", "India"),
+    PrefixSuggestion("+234", "Nigeria", "Nigeria"),
+    PrefixSuggestion("+92", "Pakistan", "Pakistan")
+)
+
+/**
+ * Enhanced bottom sheet for adding a prefix with quick suggestions
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -204,6 +258,7 @@ private fun AddPrefixBottomSheet(
 ) {
     var prefix by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
+    val haptic = LocalHapticFeedback.current
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -228,25 +283,96 @@ private fun AddPrefixBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(24.dp)
+                .padding(horizontal = 24.dp)
                 .navigationBarsPadding()
         ) {
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "Add Blocking Rule",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Block calls starting with a prefix",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Block,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Quick suggestions
             Text(
-                text = "Add Blocked Prefix",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
+                text = "Quick Add",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = FontWeight.Medium
             )
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            Text(
-                text = "All calls starting with this prefix will be blocked",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(commonPrefixes) { suggestion ->
+                    SuggestionChip(
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            prefix = suggestion.prefix
+                            description = suggestion.description
+                        },
+                        label = { Text(suggestion.prefix) },
+                        icon = {
+                            Icon(
+                                Icons.Default.Add,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        },
+                        shape = RoundedCornerShape(20.dp),
+                        colors = SuggestionChipDefaults.suggestionChipColors(
+                            containerColor = if (prefix == suggestion.prefix)
+                                MaterialTheme.colorScheme.primaryContainer
+                            else
+                                MaterialTheme.colorScheme.surfaceContainerHigh
+                        )
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(24.dp))
+
+            // Custom prefix input
+            Text(
+                text = "Custom Prefix",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = FontWeight.Medium
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             OutlinedTextField(
                 value = prefix,
@@ -256,36 +382,54 @@ private fun AddPrefixBottomSheet(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
+                leadingIcon = {
+                    Icon(
+                        Icons.Default.Phone,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
                 )
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             OutlinedTextField(
                 value = description,
                 onValueChange = { description = it },
-                label = { Text("Description (optional)") },
-                placeholder = { Text("e.g., Polish spam calls") },
+                label = { Text("Note (optional)") },
+                placeholder = { Text("e.g., Spam calls from...") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
+                leadingIcon = {
+                    Icon(
+                        Icons.Default.Notes,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
                 )
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
+            // Action buttons
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 OutlinedButton(
-                    onClick = onDismiss,
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onDismiss()
+                    },
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp)
                 ) {
@@ -293,7 +437,10 @@ private fun AddPrefixBottomSheet(
                 }
 
                 Button(
-                    onClick = { onAdd(prefix, description.ifBlank { null }) },
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onAdd(prefix, description.ifBlank { null })
+                    },
                     enabled = prefix.isNotBlank(),
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp),
@@ -301,11 +448,17 @@ private fun AddPrefixBottomSheet(
                         containerColor = MaterialTheme.colorScheme.primary
                     )
                 ) {
-                    Text("Add Prefix")
+                    Icon(
+                        Icons.Default.Check,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Block Prefix", fontWeight = FontWeight.SemiBold)
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }
