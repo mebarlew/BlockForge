@@ -12,6 +12,9 @@ import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.PhoneDisabled
+import androidx.compose.material.icons.filled.PersonOff
+import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.DoNotDisturbOn
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -271,7 +274,7 @@ fun PrefixCard(
 }
 
 /**
- * Blocked call log card
+ * Blocked call log card with different icons based on block reason
  */
 @Composable
 fun BlockedCallCard(
@@ -280,6 +283,32 @@ fun BlockedCallCard(
     modifier: Modifier = Modifier
 ) {
     val dateFormat = remember { SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()) }
+
+    // Choose icon and color based on block reason
+    val (icon, iconColor, reasonLabel) = remember(call.matchedPrefix) {
+        when {
+            call.matchedPrefix == "Block All Calls" -> Triple(
+                Icons.Default.DoNotDisturbOn,
+                StatusInactive,
+                "Block All"
+            )
+            call.matchedPrefix == "Unknown Number" -> Triple(
+                Icons.Default.PersonOff,
+                Color(0xFFFF9800),  // Orange
+                "Unknown"
+            )
+            call.matchedPrefix == "International" -> Triple(
+                Icons.Default.Public,
+                Color(0xFF9C27B0),  // Purple
+                "International"
+            )
+            else -> Triple(
+                Icons.Default.PhoneDisabled,
+                StatusInactive,
+                "Prefix: ${call.matchedPrefix}"
+            )
+        }
+    }
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -299,13 +328,13 @@ fun BlockedCallCard(
                 modifier = Modifier
                     .size(44.dp)
                     .clip(CircleShape)
-                    .background(StatusInactive.copy(alpha = 0.1f)),
+                    .background(iconColor.copy(alpha = 0.1f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = Icons.Default.PhoneDisabled,
+                    imageVector = icon,
                     contentDescription = null,
-                    tint = StatusInactive,
+                    tint = iconColor,
                     modifier = Modifier.size(22.dp)
                 )
             }
@@ -313,20 +342,37 @@ fun BlockedCallCard(
             Spacer(modifier = Modifier.width(16.dp))
 
             Column(modifier = Modifier.weight(1f)) {
+                // Show contact name if available, otherwise phone number
                 Text(
-                    text = call.phoneNumber,
+                    text = call.contactName ?: call.phoneNumber,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+                // If we have a contact name, also show the phone number below it
+                if (call.contactName != null) {
                     Text(
-                        text = "Matched: ${call.matchedPrefix}",
+                        text = call.phoneNumber,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Colored badge for block reason
+                    Surface(
+                        color = iconColor.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(4.dp)
+                    ) {
+                        Text(
+                            text = reasonLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = iconColor,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
                     Text(
                         text = "•",
                         style = MaterialTheme.typography.bodySmall,

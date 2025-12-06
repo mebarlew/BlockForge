@@ -8,7 +8,7 @@ import androidx.room.RoomDatabase
  */
 @Database(
     entities = [BlockedPrefix::class, BlockedCall::class, CallerInfo::class, BlockingSettings::class],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

@@ -5,6 +5,8 @@ import android.content.Context
 import android.os.Build
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -14,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.blockforge.ui.viewmodel.SettingsViewModel
@@ -118,28 +121,40 @@ fun SettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Used to identify international calls",
+                        text = "Used to identify international calls (e.g., +1, +44, +48)",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(12.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        CountryCodeButton("+1", "US/CA", settings.userCountryCode == "+1") {
-                            viewModel.updateCountryCode("+1")
-                        }
-                        CountryCodeButton("+44", "UK", settings.userCountryCode == "+44") {
-                            viewModel.updateCountryCode("+44")
-                        }
-                        CountryCodeButton("+49", "DE", settings.userCountryCode == "+49") {
-                            viewModel.updateCountryCode("+49")
-                        }
-                        CountryCodeButton("+33", "FR", settings.userCountryCode == "+33") {
-                            viewModel.updateCountryCode("+33")
-                        }
+
+                    // Text input for country code
+                    var countryCodeInput by remember { mutableStateOf(settings.userCountryCode) }
+
+                    // Update input when settings change
+                    LaunchedEffect(settings.userCountryCode) {
+                        countryCodeInput = settings.userCountryCode
                     }
+
+                    OutlinedTextField(
+                        value = countryCodeInput,
+                        onValueChange = { newValue ->
+                            // Only allow + and digits
+                            val filtered = newValue.filter { it == '+' || it.isDigit() }
+                            countryCodeInput = filtered
+                            if (filtered.startsWith("+") && filtered.length >= 2) {
+                                viewModel.updateCountryCode(filtered)
+                            }
+                        },
+                        label = { Text("Country Code") },
+                        placeholder = { Text("+48") },
+                        leadingIcon = {
+                            Icon(Icons.Default.Public, contentDescription = null)
+                        },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
 
@@ -310,32 +325,3 @@ private fun SettingToggleItem(
     }
 }
 
-@Composable
-private fun CountryCodeButton(
-    code: String,
-    label: String,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
-    FilterChip(
-        selected = isSelected,
-        onClick = onClick,
-        label = {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(code, style = MaterialTheme.typography.labelLarge)
-                Text(label, style = MaterialTheme.typography.labelSmall)
-            }
-        },
-        leadingIcon = if (isSelected) {
-            {
-                Icon(
-                    imageVector = Icons.Default.Check,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-        } else null
-    )
-}

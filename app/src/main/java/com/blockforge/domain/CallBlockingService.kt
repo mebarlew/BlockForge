@@ -15,9 +15,9 @@ import com.blockforge.data.repository.CallerIdRepository
 import com.blockforge.data.repository.SettingsRepository
 import com.blockforge.ui.CallerIdActivity
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import javax.inject.Inject
 
 /**
@@ -38,8 +38,6 @@ class CallBlockingService : CallScreeningService() {
     @Inject
     lateinit var settingsRepository: SettingsRepository
 
-    private val serviceScope = CoroutineScope(Dispatchers.IO)
-
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "CallBlockingService CREATED")
@@ -51,13 +49,32 @@ class CallBlockingService : CallScreeningService() {
 
     override fun onScreenCall(callDetails: Call.Details) {
         val phoneNumber = callDetails.handle?.schemeSpecificPart ?: ""
+        val isIncoming = callDetails.callDirection == Call.Details.DIRECTION_INCOMING
 
         Log.e(TAG, "=== CALL SCREENING STARTED ===")
         Log.e(TAG, "Phone number: $phoneNumber")
+        Log.e(TAG, "Direction: ${if (isIncoming) "INCOMING" else "OUTGOING"}")
         Log.e(TAG, "Call details: $callDetails")
 
-        serviceScope.launch {
+        // Only block INCOMING calls - never block outgoing calls!
+        if (!isIncoming) {
+            Log.e(TAG, "Outgoing call - allowing without checks")
+            val response = CallResponse.Builder()
+                .setDisallowCall(false)
+                .setRejectCall(false)
+                .build()
+            respondToCall(callDetails, response)
+            return
+        }
+
+        // IMPORTANT: Use runBlocking because Android requires respondToCall()
+        // to be called BEFORE onScreenCall() returns. Using launch {} would
+        // return immediately and the call would always be allowed.
+        // This is like using "await" in JavaScript instead of fire-and-forget.
+        runBlocking(Dispatchers.IO) {
             try {
+                // Timeout at 4.5 seconds (Android times out at 5 seconds)
+                withTimeout(4500) {
                 // Get current blocking settings
                 val settings = settingsRepository.getSettingsOnce()
                 Log.e(TAG, "Settings loaded: blockAll=${settings.blockAll}, blockUnknown=${settings.blockUnknown}, blockInternational=${settings.blockInternational}")
@@ -99,6 +116,18 @@ class CallBlockingService : CallScreeningService() {
 
                 Log.e(TAG, "Final decision: shouldBlock = $shouldBlock")
 
+                // Log blocked call to database
+                if (shouldBlock) {
+                    val blockReason = when {
+                        settings.blockAll -> "Block All Calls"
+                        matchedPrefix != null -> matchedPrefix
+                        settings.blockUnknown && !isInContactsList -> "Unknown Number"
+                        settings.blockInternational -> "International"
+                        else -> "Unknown"
+                    }
+                    logBlockedCall(phoneNumber, blockReason)
+                }
+
                 // IMPORTANT: Respond immediately to avoid Android timeout (5 second limit)
                 val response = CallResponse.Builder()
                     .setDisallowCall(shouldBlock)
@@ -110,6 +139,7 @@ class CallBlockingService : CallScreeningService() {
                 Log.e(TAG, "Calling respondToCall with disallow=$shouldBlock, reject=$shouldBlock")
                 respondToCall(callDetails, response)
                 Log.e(TAG, "respondToCall completed")
+                }  // End withTimeout
             } catch (e: Exception) {
                 Log.e(TAG, "ERROR in call screening", e)
                 // On error, allow the call
@@ -118,8 +148,8 @@ class CallBlockingService : CallScreeningService() {
                     .setRejectCall(false)
                     .build()
                 respondToCall(callDetails, response)
-                Log.e(TAG, "=== CALL SCREENING COMPLETED ===")
             }
+            Log.e(TAG, "=== CALL SCREENING COMPLETED ===")
         }
     }
 
@@ -174,15 +204,55 @@ class CallBlockingService : CallScreeningService() {
      */
     private suspend fun logBlockedCall(phoneNumber: String, matchedPrefix: String) {
         try {
+            // Look up contact name from phonebook
+            val contactName = getContactName(phoneNumber)
+
             val blockedCall = BlockedCall(
                 phoneNumber = phoneNumber,
-                matchedPrefix = matchedPrefix
+                matchedPrefix = matchedPrefix,
+                contactName = contactName
             )
             database.blockedCallDao().insert(blockedCall)
-            Log.d(TAG, "Logged blocked call: $phoneNumber")
+            Log.d(TAG, "Logged blocked call: $phoneNumber (${contactName ?: "Unknown"})")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to log blocked call", e)
         }
+    }
+
+    /**
+     * Get contact name from phonebook for a phone number
+     */
+    private fun getContactName(phoneNumber: String): String? {
+        if (phoneNumber.isBlank()) return null
+
+        // Check permission first
+        if (checkSelfPermission(android.Manifest.permission.READ_CONTACTS)
+            != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            return null
+        }
+
+        var cursor: Cursor? = null
+        try {
+            val uri = Uri.withAppendedPath(
+                ContactsContract.PhoneLookup.CONTENT_FILTER_URI,
+                Uri.encode(phoneNumber)
+            )
+            cursor = contentResolver.query(
+                uri,
+                arrayOf(ContactsContract.PhoneLookup.DISPLAY_NAME),
+                null,
+                null,
+                null
+            )
+            if (cursor != null && cursor.moveToFirst()) {
+                return cursor.getString(0)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error looking up contact name", e)
+        } finally {
+            cursor?.close()
+        }
+        return null
     }
 
     /**
@@ -190,6 +260,13 @@ class CallBlockingService : CallScreeningService() {
      */
     private fun isInContacts(phoneNumber: String): Boolean {
         if (phoneNumber.isBlank()) return false
+
+        // Check permission first (user may have revoked it)
+        if (checkSelfPermission(android.Manifest.permission.READ_CONTACTS)
+            != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            Log.d(TAG, "READ_CONTACTS permission not granted, assuming not in contacts")
+            return false
+        }
 
         var cursor: Cursor? = null
         try {

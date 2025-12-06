@@ -1,5 +1,10 @@
 package com.blockforge.ui.screens
 
+import android.app.role.RoleManager
+import android.content.Context
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -10,33 +15,60 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.blockforge.ui.components.*
 import com.blockforge.ui.viewmodel.BlocklistViewModel
 
 /**
- * Main screen with modern tabbed interface
+ * Blocking rules screen - manage blocked prefixes
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BlocklistScreen(
     viewModel: BlocklistViewModel = hiltViewModel()
 ) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
     val blockedPrefixes by viewModel.blockedPrefixes.collectAsState()
-    val recentBlockedCalls by viewModel.recentBlockedCalls.collectAsState()
-    val totalBlocked by viewModel.totalBlockedCount.collectAsState()
-    val todayBlocked by viewModel.todayBlockedCount.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
 
-    var selectedTab by remember { mutableIntStateOf(0) }
     var showAddSheet by remember { mutableStateOf(false) }
+
+    // Check Call Screening Role status
+    var hasCallScreeningRole by remember { mutableStateOf(checkCallScreeningRole(context)) }
+
+    // Launcher for Call Screening Role request
+    val callScreeningRoleLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { _ ->
+        hasCallScreeningRole = checkCallScreeningRole(context)
+    }
+
+    // Refresh when returning from settings
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                hasCallScreeningRole = checkCallScreeningRole(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val snackbarHostState = remember { SnackbarHostState() }
@@ -53,29 +85,32 @@ fun BlocklistScreen(
     }
 
     Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Blocking Rules") },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            )
+        },
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = {
             SnackbarHost(hostState = snackbarHostState)
         },
         floatingActionButton = {
-            AnimatedVisibility(
-                visible = selectedTab == 0,
-                enter = scaleIn() + fadeIn(),
-                exit = scaleOut() + fadeOut()
+            ExtendedFloatingActionButton(
+                onClick = { showAddSheet = true },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = Color.White,
+                shape = CircleShape
             ) {
-                ExtendedFloatingActionButton(
-                    onClick = { showAddSheet = true },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = Color.White,
-                    shape = CircleShape
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = "Add prefix"
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Add Prefix")
-                }
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Add prefix"
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Add Prefix")
             }
         }
     ) { padding ->
@@ -84,31 +119,25 @@ fun BlocklistScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Hero header with stats
-            HeroHeader(
-                totalBlocked = totalBlocked,
-                todayBlocked = todayBlocked,
-                prefixCount = blockedPrefixes.size
-            )
-
-            // Tab row
-            BlockForgeTabRow(
-                selectedTabIndex = selectedTab,
-                onTabSelected = { selectedTab = it }
-            )
-
-            // Content based on selected tab
-            when (selectedTab) {
-                0 -> PrefixListContent(
-                    prefixes = blockedPrefixes,
-                    onDelete = { viewModel.deletePrefix(it) }
-                )
-                1 -> CallLogContent(
-                    calls = recentBlockedCalls,
-                    onDelete = { viewModel.deleteBlockedCall(it) },
-                    onClearAll = { viewModel.clearBlockedCallLogs() }
+            // Warning banner if Call Screening Role not granted
+            if (!hasCallScreeningRole) {
+                CallScreeningWarningBanner(
+                    onOpenSettings = {
+                        // Use launcher for proper ActivityResult handling
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            val roleManager = context.getSystemService(Context.ROLE_SERVICE) as RoleManager
+                            val intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_CALL_SCREENING)
+                            callScreeningRoleLauncher.launch(intent)
+                        }
+                    }
                 )
             }
+
+            // Prefix list
+            PrefixListContent(
+                prefixes = blockedPrefixes,
+                onDelete = { viewModel.deletePrefix(it) }
+            )
         }
 
         // Bottom sheet for adding prefix
@@ -158,59 +187,6 @@ private fun PrefixListContent(
             // Add some space at the bottom for FAB
             item {
                 Spacer(modifier = Modifier.height(80.dp))
-            }
-        }
-    }
-}
-
-/**
- * Call log tab content
- */
-@Composable
-private fun CallLogContent(
-    calls: List<com.blockforge.data.database.BlockedCall>,
-    onDelete: (com.blockforge.data.database.BlockedCall) -> Unit,
-    onClearAll: () -> Unit
-) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        if (calls.isNotEmpty()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.End
-            ) {
-                TextButton(onClick = onClearAll) {
-                    Text(
-                        text = "Clear All",
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-            }
-        }
-
-        if (calls.isEmpty()) {
-            EmptyState(
-                icon = Icons.Default.History,
-                title = "No Blocked Calls",
-                subtitle = "Blocked calls will appear here"
-            )
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(
-                    items = calls,
-                    key = { it.id }
-                ) { call ->
-                    BlockedCallCard(
-                        call = call,
-                        onDelete = { onDelete(call) },
-                        modifier = Modifier.animateItem()
-                    )
-                }
             }
         }
     }
@@ -333,3 +309,81 @@ private fun AddPrefixBottomSheet(
         }
     }
 }
+
+/**
+ * Warning banner shown when Call Screening Role is not granted
+ * This is CRITICAL - without this permission, the app cannot block calls!
+ */
+@Composable
+private fun CallScreeningWarningBanner(
+    onOpenSettings: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer
+        ),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(32.dp)
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Call Blocking Disabled",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                    Text(
+                        text = "BlockForge is not set as your call screening app. Calls will NOT be blocked!",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Button(
+                onClick = onOpenSettings,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error
+                ),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(
+                    text = "Enable Call Blocking",
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Check if the app has the Call Screening role
+ */
+private fun checkCallScreeningRole(context: Context): Boolean {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        val roleManager = context.getSystemService(Context.ROLE_SERVICE) as? RoleManager
+        roleManager?.isRoleHeld(RoleManager.ROLE_CALL_SCREENING) ?: false
+    } else {
+        // Before Android 10, call screening works differently
+        true
+    }
+}
+

@@ -18,6 +18,9 @@ data class BlockedCall(
     @ColumnInfo(name = "matched_prefix")
     val matchedPrefix: String,
 
+    @ColumnInfo(name = "contact_name")
+    val contactName: String? = null,
+
     @ColumnInfo(name = "blocked_at")
     val blockedAt: Long = System.currentTimeMillis()
 )

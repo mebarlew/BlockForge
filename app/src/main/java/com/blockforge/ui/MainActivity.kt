@@ -18,7 +18,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import com.blockforge.ui.screens.BlocklistScreen
+import com.blockforge.ui.screens.LogScreen
 import com.blockforge.ui.screens.PermissionsScreen
+import com.blockforge.ui.screens.PhoneScreen
 import com.blockforge.ui.screens.SettingsScreen
 import com.blockforge.ui.theme.BlockForgeTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -61,28 +63,43 @@ private fun MainScreen() {
         )
     } else {
         // Main app with bottom navigation
+        // Order: Phone → Log → Blocking → Settings
         Scaffold(
             bottomBar = {
                 NavigationBar {
                     NavigationBarItem(
-                        icon = { Icon(Icons.Default.Block, contentDescription = null) },
-                        label = { Text("Blocklist") },
+                        icon = { Icon(Icons.Default.Phone, contentDescription = null) },
+                        label = { Text("Phone") },
                         selected = selectedScreen == 0,
                         onClick = { selectedScreen = 0 }
                     )
                     NavigationBarItem(
-                        icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                        label = { Text("Settings") },
+                        icon = { Icon(Icons.Default.History, contentDescription = null) },
+                        label = { Text("Log") },
                         selected = selectedScreen == 1,
                         onClick = { selectedScreen = 1 }
+                    )
+                    NavigationBarItem(
+                        icon = { Icon(Icons.Default.Block, contentDescription = null) },
+                        label = { Text("Blocking") },
+                        selected = selectedScreen == 2,
+                        onClick = { selectedScreen = 2 }
+                    )
+                    NavigationBarItem(
+                        icon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                        label = { Text("Settings") },
+                        selected = selectedScreen == 3,
+                        onClick = { selectedScreen = 3 }
                     )
                 }
             }
         ) { padding ->
             Box(modifier = Modifier.padding(padding)) {
                 when (selectedScreen) {
-                    0 -> BlocklistScreen()
-                    1 -> SettingsScreen()
+                    0 -> PhoneScreen()
+                    1 -> LogScreen()
+                    2 -> BlocklistScreen()
+                    3 -> SettingsScreen()
                 }
             }
         }
@@ -102,6 +119,10 @@ private fun checkAllPermissions(context: Context): Boolean {
         context, Manifest.permission.READ_CONTACTS
     ) == PackageManager.PERMISSION_GRANTED
 
+    val hasCallPhone = ContextCompat.checkSelfPermission(
+        context, Manifest.permission.CALL_PHONE
+    ) == PackageManager.PERMISSION_GRANTED
+
     val hasOverlay = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
         Settings.canDrawOverlays(context)
     } else {
@@ -115,5 +136,5 @@ private fun checkAllPermissions(context: Context): Boolean {
         true
     }
 
-    return hasPhoneState && hasCallLog && hasContacts && hasOverlay && hasCallScreening
+    return hasPhoneState && hasCallLog && hasContacts && hasCallPhone && hasOverlay && hasCallScreening
 }

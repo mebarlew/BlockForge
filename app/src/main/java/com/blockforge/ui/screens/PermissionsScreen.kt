@@ -1,12 +1,15 @@
 package com.blockforge.ui.screens
 
 import android.Manifest
+import android.app.Activity
 import android.app.role.RoleManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -42,10 +45,19 @@ fun PermissionsScreen(
     val phoneStatePermission = rememberPermissionState(Manifest.permission.READ_PHONE_STATE)
     val callLogPermission = rememberPermissionState(Manifest.permission.READ_CALL_LOG)
     val contactsPermission = rememberPermissionState(Manifest.permission.READ_CONTACTS)
+    val callPhonePermission = rememberPermissionState(Manifest.permission.CALL_PHONE)
 
     // Special permissions
     var hasOverlayPermission by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
     var hasCallScreeningRole by remember { mutableStateOf(checkCallScreeningRole(context)) }
+
+    // Launcher for Call Screening Role request (needs ActivityResult, not just startActivity!)
+    val callScreeningRoleLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        // Check if user granted the role
+        hasCallScreeningRole = checkCallScreeningRole(context)
+    }
 
     // Refresh permissions when returning from settings
     DisposableEffect(lifecycleOwner) {
@@ -64,6 +76,7 @@ fun PermissionsScreen(
     val allGranted = phoneStatePermission.status.isGranted &&
             callLogPermission.status.isGranted &&
             contactsPermission.status.isGranted &&
+            callPhonePermission.status.isGranted &&
             hasOverlayPermission &&
             hasCallScreeningRole
 
@@ -146,6 +159,14 @@ fun PermissionsScreen(
             )
 
             PermissionCard(
+                title = "Make Calls",
+                description = "Use the built-in phone dialer",
+                icon = Icons.Default.Call,
+                isGranted = callPhonePermission.status.isGranted,
+                onRequest = { callPhonePermission.launchPermissionRequest() }
+            )
+
+            PermissionCard(
                 title = "Display Over Apps",
                 description = "Show caller ID overlay",
                 icon = Icons.Default.Layers,
@@ -166,7 +187,12 @@ fun PermissionsScreen(
                 isGranted = hasCallScreeningRole,
                 isRequired = true,
                 onRequest = {
-                    requestCallScreeningRole(context)
+                    // Use launcher for proper ActivityResult handling
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        val roleManager = context.getSystemService(Context.ROLE_SERVICE) as RoleManager
+                        val intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_CALL_SCREENING)
+                        callScreeningRoleLauncher.launch(intent)
+                    }
                 }
             )
 
@@ -276,10 +302,3 @@ private fun checkCallScreeningRole(context: Context): Boolean {
     }
 }
 
-private fun requestCallScreeningRole(context: Context) {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        val roleManager = context.getSystemService(Context.ROLE_SERVICE) as RoleManager
-        val intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_CALL_SCREENING)
-        context.startActivity(intent)
-    }
-}

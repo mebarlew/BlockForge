@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.blockforge.data.database.BlockedCall
 import com.blockforge.data.database.BlockedPrefix
 import com.blockforge.data.repository.BlocklistRepository
+import com.blockforge.data.repository.CallLogRepository
+import com.blockforge.data.repository.SystemCallEntry
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -19,26 +21,29 @@ import javax.inject.Inject
  */
 @HiltViewModel
 class BlocklistViewModel @Inject constructor(
-    private val repository: BlocklistRepository
+    private val repository: BlocklistRepository,
+    private val callLogRepository: CallLogRepository
 ) : ViewModel() {
 
     /**
      * List of all blocked prefixes
+     * Using Eagerly to keep data in memory when switching tabs
      */
     val blockedPrefixes: StateFlow<List<BlockedPrefix>> = repository.getAllPrefixes()
         .stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
+            started = SharingStarted.Eagerly,
             initialValue = emptyList()
         )
 
     /**
      * Recent blocked calls log
+     * Using Eagerly to persist data when switching tabs
      */
     val recentBlockedCalls: StateFlow<List<BlockedCall>> = repository.getRecentBlockedCalls()
         .stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
+            started = SharingStarted.Eagerly,
             initialValue = emptyList()
         )
 
@@ -48,7 +53,7 @@ class BlocklistViewModel @Inject constructor(
     val totalBlockedCount: StateFlow<Int> = repository.getBlockedCallsCount()
         .stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
+            started = SharingStarted.Eagerly,
             initialValue = 0
         )
 
@@ -58,12 +63,37 @@ class BlocklistViewModel @Inject constructor(
     val todayBlockedCount: StateFlow<Int> = repository.getBlockedCallsCountToday()
         .stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
+            started = SharingStarted.Eagerly,
             initialValue = 0
         )
 
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+
+    /**
+     * System call log (from Android's call history)
+     */
+    private val _systemCallLog = MutableStateFlow<List<SystemCallEntry>>(emptyList())
+    val systemCallLog: StateFlow<List<SystemCallEntry>> = _systemCallLog.asStateFlow()
+
+    private val _isLoadingCallLog = MutableStateFlow(false)
+    val isLoadingCallLog: StateFlow<Boolean> = _isLoadingCallLog.asStateFlow()
+
+    init {
+        // Load system call log on init
+        refreshSystemCallLog()
+    }
+
+    /**
+     * Refresh the system call log from Android
+     */
+    fun refreshSystemCallLog() {
+        viewModelScope.launch {
+            _isLoadingCallLog.value = true
+            _systemCallLog.value = callLogRepository.getRecentCalls(100)
+            _isLoadingCallLog.value = false
+        }
+    }
 
     /**
      * Add a new prefix to the blocklist
