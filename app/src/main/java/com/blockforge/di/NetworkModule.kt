@@ -21,7 +21,7 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
 
-    private const val NUM_VERIFY_BASE_URL = "http://apilayer.net/api/"
+    private const val NUM_VERIFY_BASE_URL = "https://apilayer.net/api/"
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -33,7 +33,8 @@ object NetworkModule {
     @Singleton
     fun provideOkHttpClient(): OkHttpClient {
         val loggingInterceptor = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
+            // Set to NONE for production, BODY for debugging
+            level = HttpLoggingInterceptor.Level.NONE
         }
 
         return OkHttpClient.Builder()

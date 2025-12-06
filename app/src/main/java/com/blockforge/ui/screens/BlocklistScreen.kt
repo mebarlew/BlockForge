@@ -33,14 +33,30 @@ fun BlocklistScreen(
     val recentBlockedCalls by viewModel.recentBlockedCalls.collectAsState()
     val totalBlocked by viewModel.totalBlockedCount.collectAsState()
     val todayBlocked by viewModel.todayBlockedCount.collectAsState()
+    val errorMessage by viewModel.errorMessage.collectAsState()
 
     var selectedTab by remember { mutableIntStateOf(0) }
     var showAddSheet by remember { mutableStateOf(false) }
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // Show error messages
+    LaunchedEffect(errorMessage) {
+        errorMessage?.let {
+            snackbarHostState.showSnackbar(
+                message = it,
+                duration = SnackbarDuration.Short
+            )
+            viewModel.clearError()
+        }
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = {
+            SnackbarHost(hostState = snackbarHostState)
+        },
         floatingActionButton = {
             AnimatedVisibility(
                 visible = selectedTab == 0,

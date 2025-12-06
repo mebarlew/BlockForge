@@ -5,6 +5,7 @@ import androidx.room.Room
 import com.blockforge.data.database.AppDatabase
 import com.blockforge.data.database.BlockedCallDao
 import com.blockforge.data.database.BlockedPrefixDao
+import com.blockforge.data.database.BlockingSettingsDao
 import com.blockforge.data.database.CallerInfoDao
 import dagger.Module
 import dagger.Provides
@@ -47,5 +48,10 @@ object AppModule {
     @Provides
     fun provideCallerInfoDao(database: AppDatabase): CallerInfoDao {
         return database.callerInfoDao()
+    }
+
+    @Provides
+    fun provideBlockingSettingsDao(database: AppDatabase): BlockingSettingsDao {
+        return database.blockingSettingsDao()
     }
 }

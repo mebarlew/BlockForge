@@ -1,10 +1,10 @@
 package com.blockforge.ui
 
+import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
@@ -25,6 +25,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.blockforge.ui.theme.*
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.delay
+
+private const val AUTO_DISMISS_DELAY = 8000L // 8 seconds
 
 /**
  * Transparent overlay activity showing caller ID information
@@ -39,19 +42,31 @@ class CallerIdActivity : ComponentActivity() {
         const val EXTRA_LINE_TYPE = "line_type"
         const val EXTRA_IS_SPAM = "is_spam"
         const val EXTRA_SPAM_SCORE = "spam_score"
-
-        private const val AUTO_DISMISS_DELAY = 8000L // 8 seconds
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         // Make activity appear over lock screen
-        window.addFlags(
-            WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-            WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
-            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
-        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+            )
+        }
+
+        // Handle back press
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                finish()
+            }
+        })
 
         val phoneNumber = intent.getStringExtra(EXTRA_PHONE_NUMBER) ?: "Unknown"
         val countryName = intent.getStringExtra(EXTRA_COUNTRY_NAME)
@@ -73,18 +88,6 @@ class CallerIdActivity : ComponentActivity() {
                 )
             }
         }
-
-        // Auto-dismiss after delay
-        Handler(Looper.getMainLooper()).postDelayed({
-            if (!isFinishing) {
-                finish()
-            }
-        }, AUTO_DISMISS_DELAY)
-    }
-
-    override fun onBackPressed() {
-        super.onBackPressed()
-        finish()
     }
 }
 
@@ -102,6 +105,9 @@ fun CallerIdOverlay(
 
     LaunchedEffect(Unit) {
         visible = true
+        // Auto-dismiss after delay
+        delay(AUTO_DISMISS_DELAY)
+        onDismiss()
     }
 
     Box(
